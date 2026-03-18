@@ -13,9 +13,6 @@ router.post('/register', async function (req, res, next) {
     try {
         let { username, password, email } = req.body;
         
-        // const salt = bcrypt.genSaltSync(10);
-        // const hashedPassword = bcrypt.hashSync(password, salt);
-        
         let newUser = await userController.CreateAnUser(
             username, 
             password,
@@ -74,7 +71,7 @@ router.post('/change-password', CheckLogin, async function (req, res, next) {
         let { oldpassword, newpassword } = req.body;
         let user = req.user; // Đã được CheckLogin gán vào req
 
-        // 1. Kiểm tra có truyền đủ 2 field không
+        // 1. Kiểm tra input đầu vào có bị thiếu không
         if (!oldpassword || !newpassword) {
             return res.status(400).send({ message: "Vui lòng cung cấp đủ mật khẩu cũ và mật khẩu mới" });
         }
@@ -84,16 +81,22 @@ router.post('/change-password', CheckLogin, async function (req, res, next) {
             return res.status(400).send({ message: "Mật khẩu mới không được trùng với mật khẩu cũ" });
         }
 
-        // 3. Xác thực mật khẩu cũ xem user nhập đúng không
+        // 3. THÊM LẠI VALIDATE: Độ mạnh mật khẩu mới 
+        // (Ít nhất 8 ký tự, bao gồm ít nhất 1 chữ hoa, 1 chữ thường và 1 số)
+        const passwordStrengthRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d\W]{8,}$/;
+        if (!passwordStrengthRegex.test(newpassword)) {
+            return res.status(400).send({ 
+                message: "Mật khẩu mới phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường và số" 
+            });
+        }
+
+        // 4. Xác thực mật khẩu cũ xem user nhập đúng không
         if (!bcrypt.compareSync(oldpassword, user.password)) {
             return res.status(401).send({ message: "Mật khẩu cũ không chính xác" });
         }
 
-        // 4. Mã hóa mật khẩu mới (Bắt buộc để API Login còn chạy được) và lưu
-        const salt = bcrypt.genSaltSync(10);
-        const hashedNewPassword = bcrypt.hashSync(newpassword, salt);
-
-        user.password = hashedNewPassword;
+        // 5. Gán mật khẩu mới (plain text) để schema Mongoose tự động băm (hash)
+        user.password = newpassword;
         await user.save();
 
         return res.send({ message: "Đổi mật khẩu thành công" });
